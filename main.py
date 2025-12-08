@@ -101,13 +101,6 @@ class PhaseGUI(tk.Tk):
         self.n_bin_entry = Entry(lc_params_frame, textvariable=self.n_bin_var)
         self.n_bin_entry.grid(row=0, column=1)
 
-        Label(lc_params_frame, text="# Buffer size:").grid(row=1, column=0)
-        self.buffer_size_var = tk.IntVar()
-        self.buffer_size_var.set(200_000)
-        self.buffer_size_var.trace_add("write", lambda *_: self.extend_buffers())
-        self.buffer_size_entry = Entry(lc_params_frame, textvariable=self.buffer_size_var)
-        self.buffer_size_entry.grid(row=1, column=1)
-
         Label(lc_params_frame, text="ROI width (px):").grid(row=2, column=0)
         self.width_var = tk.IntVar()
         self.width_var.set(24)
@@ -137,15 +130,15 @@ class PhaseGUI(tk.Tk):
         self.blur_scale = Scale(lc_params_frame, from_=0, to_=6, resolution=0.1, length=150, variable=self.blur_var, orient=tk.HORIZONTAL)
         self.blur_scale.grid(row=0, column=1)
 
-        Label(lc_params_frame, text="Min counts:").grid(row=1, column=0)
+        Label(lc_params_frame, text="Min e-:").grid(row=1, column=0)
         self.stretch_min_var = tk.IntVar()
-        self.stretch_min_var.set(-1)
+        self.stretch_min_var.set(0)
         self.buffer_size_entry = Entry(lc_params_frame, textvariable=self.stretch_min_var)
         self.buffer_size_entry.grid(row=1, column=1)
 
-        Label(lc_params_frame, text="Max counts:").grid(row=2, column=0)
+        Label(lc_params_frame, text="Max e-:").grid(row=2, column=0)
         self.stretch_max_var = tk.IntVar()
-        self.stretch_max_var.set(-1)
+        self.stretch_max_var.set(0)
         self.buffer_size_entry = Entry(lc_params_frame, textvariable=self.stretch_max_var)
         self.buffer_size_entry.grid(row=2, column=1)
 
@@ -173,7 +166,6 @@ class PhaseGUI(tk.Tk):
         else:
             self.set_camera_data_from_camera_gui(feed)
         
-        self.image_corrector = ImageCorrector(self.image_shape)
         self.set_ephem_file()
         self.clear_data()
         self.update_frame_display()
@@ -183,15 +175,6 @@ class PhaseGUI(tk.Tk):
             with self.stretch_lock:
                 cv2.destroyAllWindows()
                 self.destroy()
-
-    def set_camera_data_from_camera_gui(self, camera_gui):
-        """
-        Set the camera feed metadata based on the camera thread
-        """
-        raise NotImplementedError()
-        # self.t_start = 2e8# GPS time of the first frame of this data set
-        # self.n_framebundle = camera_gui.batch_size
-        # self.image_shape = (3200//self.n_framebundle,512)
 
     def set_camera_data_from_file(self, saved_data_feed):
         """
@@ -205,6 +188,15 @@ class PhaseGUI(tk.Tk):
             self.upper_left = int(hdul[1].header["HIERARCH SUBARRAY HPOS"]), int(hdul[1].header["HIERARCH SUBARRAY VPOS"])
 
         self.image_shape = (frame_shape[0]//self.n_framebundle, frame_shape[1])
+
+    def set_camera_data_from_camera_gui(self, camera_gui):
+        """
+        Set the camera feed metadata based on the camera thread
+        """
+        raise NotImplementedError()
+        # self.t_start = 2e8# GPS time of the first frame of this data set
+        # self.n_framebundle = camera_gui.batch_size
+        # self.image_shape = (3200//self.n_framebundle,512)
 
     def update_batch_size(self, batch_size):
         raise NotImplementedError()
@@ -262,17 +254,6 @@ class PhaseGUI(tk.Tk):
                     self.on_range = np.copy(self.temporary_range)
                 self.temporary_range = None
 
-    def extend_buffers(self):
-        buffer_frame_size = self.get_buffer_size()
-        self.lc_fluxes.extend(buffer_frame_size)
-        self.total_image.extend(buffer_frame_size)
-        self.on_image.extend(buffer_frame_size)
-        self.off_image.extend(buffer_frame_size)
-
-    def get_buffer_size(self):
-        buffer_frame_limit = get_tk_value(self.buffer_size_var)
-        return max(buffer_frame_limit, 1)
-
     def clear_data(self):
         self.clear_lc()
         self.clear_image()
@@ -284,17 +265,15 @@ class PhaseGUI(tk.Tk):
         self.lc_phase_bin_edges = np.linspace(0, 1, n_bins+1)
         
         if self.lc_fluxes is None or n_bins != len(self.lc_fluxes.get()):
-            buffer_frame_size = self.get_buffer_size()
-            self.lc_fluxes = RollingBuffer(buffer_frame_size, (n_bins,)) # Fluxes in each LC bin
+            self.lc_fluxes = LightCurve(n_bins) # Fluxes in each LC bin
         else:
             self.lc_fluxes.clear()
 
     def clear_image(self):
         if self.on_image is None or self.off_image is None:
-            buffer_frame_size = self.get_buffer_size()
-            self.total_image = RollingBuffer(buffer_frame_size, self.image_shape)
-            self.on_image = RollingBuffer(buffer_frame_size, self.image_shape)
-            self.off_image = RollingBuffer(buffer_frame_size, self.image_shape)
+            self.total_image = Image(self.image_shape)
+            self.on_image = Image(self.image_shape)
+            self.off_image = Image(self.image_shape)
         else:
             self.total_image.clear()
             self.on_image.clear()
@@ -318,15 +297,13 @@ class PhaseGUI(tk.Tk):
             return
         
         # Get flux within ROI
-        flux = np.sum(data[self.roi_mask]) - 200 * np.sum(self.roi_mask)
+        flux = np.sum(data[self.roi_mask])
 
         # Add to the LC
         phase = self.ephemeris.get_phase(timestamp)
         if phase is None:
             return # Frequency is invalid
-        lc = np.zeros(len(self.lc_phase_bin_edges)-1)
-        lc[np.digitize(phase, self.lc_phase_bin_edges)-1] = flux
-        self.lc_fluxes.push(lc)
+        self.lc_fluxes.push(flux, phase)
 
     def process_image(self, data, timestamp):
         self.total_image.push(data)
@@ -410,7 +387,7 @@ class PhaseGUI(tk.Tk):
         # Show axis labels
         cv2.putText(image, 'Phase', (LC_LEFT_BOUND+plot_width//2-25,LC_LOWER_BOUND+35), cv2.FONT_HERSHEY_COMPLEX, 0.5, (255,255,255), 1, cv2.LINE_AA)
         label = np.zeros((25, 160, 3), np.uint8)
-        cv2.putText(label, 'Flux (Normalized)', (0,20), cv2.FONT_HERSHEY_COMPLEX, 0.5, (255,255,255), 1, cv2.LINE_AA)
+        cv2.putText(label, 'Flux (e-/frame)', (0,20), cv2.FONT_HERSHEY_COMPLEX, 0.5, (255,255,255), 1, cv2.LINE_AA)
         label = np.flip(np.transpose(label, axes=(1,0,2)), axis=0)
         image[LC_LOWER_BOUND//2-80:LC_LOWER_BOUND//2-80 + label.shape[0], 10:10 + label.shape[1]] = label
 
@@ -478,17 +455,15 @@ class PhaseGUI(tk.Tk):
         merged_image = np.zeros((3*self.image_shape[0]+1+10, self.image_shape[1], 3), np.uint8)
 
         # Refresh the total image
-        if self.frame_index == 0:
-            self.display_total_image = self.image_corrector.correct(self.total_image.get().astype(float))
+        total_image = self.total_image.get()
         self.frame_index = (self.frame_index + 1) % 10
         
         vmin = get_tk_value(self.stretch_min_var)
-        if vmin == -1:
-            vmin = np.min(self.display_total_image)
         vmax = get_tk_value(self.stretch_max_var)
-        if vmax == -1:
-            vmax = np.max(self.display_total_image)
-        stretched_total = self.apply_stretch(self.display_total_image, vmin, vmax)
+        if vmin == vmax:
+            vmin = np.min(total_image)
+            vmax = np.max(total_image)
+        stretched_total = self.apply_stretch(total_image, vmin, vmax)
         merged_image[:self.image_shape[0], :, :] = stretched_total
 
         # Add the difference image
@@ -496,7 +471,7 @@ class PhaseGUI(tk.Tk):
             if self.on_range is not None and self.off_range is not None:
                 on_image = self.on_image.get().astype(float)
                 off_image = self.off_image.get().astype(float)
-                difference_image = on_image / get_phase_duration(self.on_range) - off_image / get_phase_duration(self.off_range)
+                difference_image = on_image - off_image
                 vmin = np.min(difference_image)
                 vmax = np.max(difference_image)
                 stretched_difference = self.apply_stretch(difference_image, vmin, vmax)
@@ -560,19 +535,26 @@ class PhaseGUI(tk.Tk):
         
         # Process everything in the queue 
         while not self.frame_queue.empty():
-            frame = self.frame_queue.get_nowait()
+            frame = self.frame_queue.get_nowait().astype(float)
             timestamp = self.timestamp_queue.get_nowait()
+
+            # Clip the frame
+            frame -= 200
+            frame /= 8.9
+            frame = np.round(frame).astype(np.int64)
 
             if self.last_timestamp is None:
                 self.last_timestamp = timestamp
                 continue
             delta_t = (timestamp - self.last_timestamp) / self.n_framebundle # Time between slices
             slice_width = frame.shape[0] // self.n_framebundle # Width of each slice in pixels
-            stripped_image = frame.reshape(-1, slice_width, frame.shape[1]).astype(np.uint32)
+            stripped_image = frame.reshape(-1, slice_width, frame.shape[1])
             for (strip_index, strip) in enumerate(stripped_image):
                 strip_timestamp = timestamp + strip_index*delta_t
+
                 self.process_lc(strip, strip_timestamp)
                 self.process_image(strip, strip_timestamp)
+
             self.last_timestamp = timestamp
 
         # Display the data

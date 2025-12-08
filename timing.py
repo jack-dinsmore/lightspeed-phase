@@ -10,6 +10,7 @@ pint.logging.setup(level="WARNING")
 
 OBSERVATORY = "LCO"
 STORAGE_INTERVAL = 10*60 # Minutes of phases to store
+pint.observatory.topo_obs.TopoObs(OBSERVATORY, location=EarthLocation.of_site(OBSERVATORY))
 
 def get_all_ephemerides(obs_name):
     """Get all ephemerides available and put the obe that closest matches obs_name at the top"""
@@ -37,7 +38,6 @@ def get_all_ephemerides(obs_name):
 
 class Ephemeris:
     def __init__(self, filename, gps_time):
-        pint.observatory.topo_obs.TopoObs(OBSERVATORY, location=EarthLocation.of_site(OBSERVATORY))
         self.model = model_builder.get_model(f"ephemerides/{filename}")
         self.nu = self.model["F0"].value
         self.ephem = self.model["EPHEM"].value

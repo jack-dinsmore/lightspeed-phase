@@ -18,106 +18,46 @@ def get_phase_duration(phase_range):
         return phase_range[1] - phase_range[0]
     else:
         return 1 + phase_range[1] - phase_range[0]
-
-class ImageCorrector:
-    def __init__(self, image_shape, median_cut=3, max_wavelength=2):
-        sigma = max_wavelength / 0.05
-        width = int(np.ceil(3 * sigma))
-        line = np.arange(-width, width+1) / sigma # Units of sigma
-        self.kernel = np.sin(2*np.pi*line) / line
-        self.kernel[line==0] = 1
-        self.kernel /= np.sum(self.kernel)
-        self.flat = convolve(np.ones(image_shape[1]), self.kernel, mode="same")
-        self.median_cut = median_cut
-        self.max_wavelength = max_wavelength
-
-    def correct(self, image):
-        # Median cut
-        image_median = np.median(image)
-        image[np.abs(image - image_median) > self.median_cut] = image_median
-
-        # High pass filter
-        median_profile = np.median(image, axis=0)
-        median_profile -= convolve(median_profile, self.kernel, mode="same") / self.flat
-
-        return image - median_profile
-
-class RollingBuffer:
-    def __init__(self, limit, image_size):
-        self.image_size = image_size
-        self.data = np.zeros((limit, *image_size))
-        self.data_index = 0
-        self.data_valid = np.zeros(limit, bool) # Start with every data set not being valid
-
-        # The images are combined into "chunks" to reduce size in memory. A chunk is 1/50 of the full buffer.
-        self.chunk_limit = limit//50 + 1 # The number of images to stack into a chunk before adding the chunk to the buffer
-        self.current_chunk = np.zeros((self.chunk_limit, *image_size))
-        self.chunk_index = 0
-        # No need to create a chunk_valid variable. Everything after the chunk index is invalid.
+    
+class Image:
+    def __init__(self, image_shape):
+        self.image = np.zeros(image_shape)
+        self.n = 0
 
     def push(self, image):
-        if len(self.current_chunk) <= 1:
-            self.data[self.data_index] = image
-            self.data_valid[self.data_index] = True
-            self.data_index += 1
-        else:
-            # Add the image to the chunk
-            self.current_chunk[self.chunk_index] = image
-            self.chunk_index += 1
-            if self.chunk_index >= len(self.current_chunk):
-                # If the chunk is done, add it to the data
-                self.chunk_index = 0
-                self.data[self.data_index] = np.sum(self.current_chunk, axis=0)
-                self.data_valid[self.data_index] = True
-                self.data_index += 1
-
-        # Loop the data index
-        self.data_index = self.data_index % len(self.data)
-
-    def num(self):
-        return self.chunk_limit*np.sum(self.data_valid) + self.chunk_index
+        self.image += image
+        self.n += 1
 
     def get(self):
-        output = np.sum(self.data[self.data_valid], axis=0)
-        if len(self.current_chunk) > 1:
-            output += np.sum(self.current_chunk[:self.chunk_index], axis=0)
-        return output.astype(float) / max(1, self.num())
-    
+        return self.image.astype(float) / self.n
+
+    def num(self):
+        return self.n
+
     def clear(self):
-        self.data_index = 0
-        self.data_valid &= False # Set all data to invalid
+        self.image *= 0
+        self.n = 0
 
-    def extend(self, new_limit):
-        if new_limit == len(self.data):
-            # The new limit is the same as the old limit. Do nothing
-            return
-        
-        # Commit the current chunk to data
-        self.data[self.data_index] += np.sum(self.current_chunk, axis=0)
-        self.data_index += 1
-        self.data_index = self.data_index % len(self.data)
+class LightCurve:
+    def __init__(self, n_bins):
+        self.n_bins = n_bins
+        self.fluxes = np.zeros(n_bins)
+        self.exposures = np.zeros(n_bins)
 
-        # Extend the current chunk array
-        chunk_limit = new_limit//50 + 1 # The number of images to stack into a chunk before adding the chunk to the buffer
-        self.current_chunk = np.zeros((chunk_limit, *self.image_size))
-        self.chunk_index = 0
 
-        # Create the new data storage
-        new_data = np.zeros((new_limit, *self.image_size))
-        new_data_valid = np.zeros(new_limit, bool)
-        new_data_index = 0
-        
-        # Iterate through all the currently stored data and save all the valid options
-        for _ in range(len(self.data)):
-            if self.data_valid[self.data_index]:
-                new_data[new_data_index] = self.data[self.data_index]
-                new_data_valid[new_data_index] = True
-                new_data_index += 1
-                new_data_index = new_data_index % len(new_data)
-            self.data_index += 1
-            self.data_index = self.data_index % len(self.data)
-        
-        # Overwrite the old data
-        self.data_index = new_data_index
-        self.data = new_data
-        self.data_valid = new_data_valid
+    def push(self, flux, phase):
+        index = int(phase * self.n_bins)
+        self.fluxes[index] += flux
+        self.exposures[index] += 1
+
+    def get(self):
+        output = self.fluxes.astype(float) / self.exposures
+        output[self.exposures==0] = 0
+        return output
+
+    def num(self):
+        return np.sum(self.exposures)
+
+    def clear(self):
+        self.exposures *= 0
+        self.fluxes *= 0
