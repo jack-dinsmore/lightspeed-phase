@@ -22,7 +22,7 @@ def get_all_ephemerides(obs_name):
     for filename in os.listdir("ephemerides"):
         score = 0
         for chunk in split_name:
-            if chunk in filename:
+            if chunk.lower() in filename.lower():
                 score += len(chunk)
         scores.append(score)
         filenames.append(filename)

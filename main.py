@@ -199,20 +199,12 @@ class PhaseGUI(tk.Tk):
         """
         with fits.open(saved_data_feed.start_filename) as hdul:
             # Get the start time of the observation in MJD
-
-            sky_coord = SkyCoord(
-                ra=hdul[1].header["TELRA"],
-                dec=hdul[1].header["TELDEC"],
-                unit=(u.hourangle, u.deg),
-                frame="icrs"
-            )
             self.gps_time = Time(hdul[0].header["GPSSTART"], scale="utc")
             frame_shape = hdul[1].data[0].shape
             self.n_framebundle = int(hdul[1].header["HIERARCH FRAMEBUNDLE NUMBER"])
             self.upper_left = int(hdul[1].header["HIERARCH SUBARRAY HPOS"]), int(hdul[1].header["HIERARCH SUBARRAY VPOS"])
 
         self.image_shape = (frame_shape[0]//self.n_framebundle, frame_shape[1])
-
 
     def update_batch_size(self, batch_size):
         raise NotImplementedError()
@@ -422,6 +414,8 @@ class PhaseGUI(tk.Tk):
         label = np.flip(np.transpose(label, axes=(1,0,2)), axis=0)
         image[LC_LOWER_BOUND//2-80:LC_LOWER_BOUND//2-80 + label.shape[0], 10:10 + label.shape[1]] = label
 
+        cv2.putText(image, f'#={self.lc_fluxes.num()}', (LC_LEFT_BOUND+plot_width//2-25,10), cv2.FONT_HERSHEY_COMPLEX, 0.5, (255,255,255), 1, cv2.LINE_AA)
+
         cv2.imshow('Lightcurve', image)
         cv2.waitKey(1)
 
@@ -529,14 +523,17 @@ class PhaseGUI(tk.Tk):
         cv2.line(merged_image, (0, 2*self.image_shape[0]+11), (self.image_shape[1], 2*self.image_shape[0]+11), (255,0,255))
 
         if self.roi_center is not None:
-            cv2.putText(merged_image, f"ROI: ({self.roi_center[0]+self.upper_left[0]}, {self.roi_center[1]+self.upper_left[1]})",
-                (self.image_shape[1]//2-60, 5*self.image_shape[0]//2+11-10),
+            cv2.putText(merged_image, f"ROI: ({self.roi_center[0]}, {self.roi_center[1]})",
+                (self.image_shape[1]//2-60, 5*self.image_shape[0]//2+11-20),
+                cv2.FONT_HERSHEY_COMPLEX, 0.5, (255, 0, 255), 1, cv2.LINE_AA)
+            cv2.putText(merged_image, f"#={self.total_image.num()}",
+                (self.image_shape[1]//2-30, 5*self.image_shape[0]//2+11+0),
                 cv2.FONT_HERSHEY_COMPLEX, 0.5, (255, 0, 255), 1, cv2.LINE_AA)
 
         with self.range_lock:
             if self.on_range is not None and self.off_range is not None:
                 cv2.putText(merged_image, f"SNR: {snr_metric:.1f}",
-                    (self.image_shape[1]//2-40, 5*self.image_shape[0]//2+11+10),
+                    (self.image_shape[1]//2-40, 5*self.image_shape[0]//2+11+20),
                     cv2.FONT_HERSHEY_COMPLEX, 0.5, (255, 0, 255), 1, cv2.LINE_AA)
 
         cv2.imshow("Image", merged_image)
