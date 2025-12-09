@@ -1,8 +1,8 @@
-PSRJ           PSR J0659+1414
+PSRJ           J0659+1414
 RAJ            06:59:48.196
 DECJ           14:14:19.4
 F0             2.59788422918
-F1             −370.7985e-15
+F1             -3.707985e-13
 PEPOCH         57600
 EPHEM          DE440
 UNITS          TDB

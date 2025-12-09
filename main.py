@@ -67,6 +67,12 @@ class PhaseGUI(tk.Tk):
         self.stretch = (0.5, 0.5)
         self.marker = None
 
+        # Initialize data
+        if type(feed) is SavedDataThread:
+            self.set_camera_data_from_file(feed)
+        else:
+            self.set_camera_data_from_camera_gui(feed)
+
         # Set up GUI main frame
         self.title("Lightspeed Phasing GUI")
         self.geometry("350x620") # Adjust window size to tighten the layout
@@ -81,7 +87,7 @@ class PhaseGUI(tk.Tk):
         ephemeris_frame.grid(row=0, column=0, sticky='nsew')
 
         Label(ephemeris_frame, text="Ephemeris:").grid(row=0, column=0)
-        dropdown_options = get_all_ephemerides(feed.object_name)
+        dropdown_options = get_all_ephemerides_ra_dec(self.ra_pnt, self.dec_pnt)
         self.ephem_file_var = tk.StringVar()
         self.ephem_file_var.set(dropdown_options[0])
         self.ephem_file_var.trace_add("write", self.set_ephem_file)
@@ -159,12 +165,6 @@ class PhaseGUI(tk.Tk):
         Label(lc_params_frame, text="Hold shift & click and drag to set the \"off\" range").grid(row=3, column=0)
         Label(lc_params_frame, text="The bottom image shows on minus off").grid(row=4, column=0)
         Label(lc_params_frame, text="You can also right-click to place a circle").grid(row=5, column=0)
-
-        # Initialize data
-        if type(feed) is SavedDataThread:
-            self.set_camera_data_from_file(feed)
-        else:
-            self.set_camera_data_from_camera_gui(feed)
         
         self.set_ephem_file()
         self.clear_data()
@@ -186,6 +186,8 @@ class PhaseGUI(tk.Tk):
             frame_shape = hdul[1].data[0].shape
             self.n_framebundle = int(hdul[1].header["HIERARCH FRAMEBUNDLE NUMBER"])
             self.upper_left = int(hdul[1].header["HIERARCH SUBARRAY HPOS"]), int(hdul[1].header["HIERARCH SUBARRAY VPOS"])
+            self.ra_pnt = hdul[1].header["TELRA"]
+            self.dec_pnt = hdul[1].header["TELDEC"]
 
         self.image_shape = (frame_shape[0]//self.n_framebundle, frame_shape[1])
 
