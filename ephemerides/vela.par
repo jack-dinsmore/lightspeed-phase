@@ -1,0 +1,12 @@
+PSRJ       J0742-2822
+RAJ        07:42:49.058  
+DECJ       -28:22:43.76
+PEPOCH     53193
+F0         11.1924472071183043
+F1         −1.555028E−11
+F2         5.27E−23
+EPHEM      DE440
+UNITS      TDB
+
+# https://arxiv.org/abs/astro-ph/0612371
+# 2006

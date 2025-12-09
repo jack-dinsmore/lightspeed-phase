@@ -1,0 +1,19 @@
+PSRJ       J1023+0038
+RAJ        10:23:47.687198
+DECJ       00:38:40.84551
+PEPOCH     54906
+F0         592.42145906986
+F1         −2.432e-15
+EPHEM      DE440
+UNITS      TCB
+
+BINARY     ELL1
+POSEPOCH   54995
+A1         0.343343
+PB         0.1980963569
+PBDOT      −73.2
+T0         54905.9713992
+
+
+# https://arxiv.org/pdf/1311.5161
+# 2013

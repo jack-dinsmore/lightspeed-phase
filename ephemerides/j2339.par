@@ -1,0 +1,15 @@
+PSRJ       J2339-0533
+RAJ        23:39:38.74
+DECJ       -05:33:05.32  
+PEPOCH     59817.98572011867
+F0         346.713378637
+EPHEM      DE440
+UNITS      TDB
+
+BINARY     ELL1
+A1         0.611668
+PB         0.19309841435
+TASC       59821.68859489
+
+# https://www.aanda.org/articles/aa/abs/2025/10/aa56783-25/aa56783-25.html
+# 2025

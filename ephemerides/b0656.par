@@ -1,0 +1,12 @@
+PSRJ           PSR J0659+1414
+RAJ            06:59:48.196
+DECJ           14:14:19.4
+F0             2.59788422918
+F1             −370.7985e-15
+PEPOCH         57600
+EPHEM          DE440
+UNITS          TDB
+
+# https://academic.oup.com/mnras/article/484/3/3691/5247717
+# The UTMOST pulsar timing programme I: Overview and first results
+# 2018
