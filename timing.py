@@ -90,7 +90,6 @@ class Ephemeris:
         self.load_new_phases()
     
     def load_new_phases(self):
-        self.gps_time
         self.timestamps = np.arange(STORAGE_INTERVAL) + self.storage_index * STORAGE_INTERVAL
         times_mjd = self.timestamps / (3600 * 24) + self.gps_time
         toas = pint.toa.get_TOAs_array(
@@ -105,6 +104,14 @@ class Ephemeris:
         self.phases = delta_phase_int.astype(np.float64) + phases.frac.astype(np.float64)
         self.interpolator = interp1d(self.timestamps, self.phases, bounds_error=False, fill_value="extrapolate") # Extrapolate. This will extrapolate the calculated phases throughout the last frame, which is out of bounds of the interpolator.
         self.storage_index += 1
+
+    def set_freq(self, freq):
+        self.model["F0"].value = freq
+        self.recalc()
+
+    def recalc(self):
+        self.storage_index -= 1
+        self.load_new_phases()
 
     def get_phase(self, timestamp):
         

@@ -93,8 +93,14 @@ class PhaseGUI(tk.Tk):
         self.ephem_file_var.trace_add("write", self.set_ephem_file)
         OptionMenu(ephemeris_frame, self.ephem_file_var, *dropdown_options).grid(row=0, column=1)
 
-        self.ephem_label = Label(ephemeris_frame, text="Nu = 0 Hz")
-        self.ephem_label.grid(row=1, column=0)
+        Label(ephemeris_frame, text="Nu").grid(row=1, column=0)
+        self.ephem_freq_var = tk.DoubleVar()
+        self.ephem_freq_var.set(1)
+        self.ephem_freq_entry = Entry(ephemeris_frame, textvariable=self.ephem_freq_var)
+        self.ephem_freq_entry.grid(row=1, column=1)
+        
+        self.ephem_update_button = Button(ephemeris_frame, text="Update", command=self.set_ephem_freq)
+        self.ephem_update_button.grid(row=2, column=1)
 
         # LabelFrame for lightcurve parameters
         lc_params_frame = LabelFrame(self.main_frame, text="Lightcurve parameters", padx=5, pady=5)
@@ -210,7 +216,11 @@ class PhaseGUI(tk.Tk):
 
     def set_ephem_file(self, *_):
         self.ephemeris = Ephemeris(get_tk_value(self.ephem_file_var), self.gps_time)
-        self.ephem_label.config(text=f"Nu = {self.ephemeris.nu} Hz")
+        self.ephem_freq_var.set(self.ephemeris.nu)
+
+    def set_ephem_freq(self, *_):
+        self.ephemeris.set_freq(get_tk_value(self.ephem_freq_var))
+        print("Updated ephemeris")
 
     def update_start_time(self, start_time):
         self.t_start = start_time
