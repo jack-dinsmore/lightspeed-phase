@@ -598,7 +598,7 @@ class PhaseGUI(tk.Tk):
             slice_width = frame.shape[0] // self.n_framebundle # Width of each slice in pixels
             stripped_image = frame.reshape(-1, slice_width, frame.shape[1])
             for (strip_index, strip) in enumerate(stripped_image):
-                strip_timestamp = timestamp + strip_index*delta_t
+                strip_timestamp = timestamp + strip_index*delta_t + delta_t / 2 # Use the time at middle of readout
 
                 self.process_lc(strip, strip_timestamp)
                 self.process_image(strip, strip_timestamp)
