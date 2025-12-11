@@ -19,7 +19,7 @@ def get_phase_duration(phase_range):
     else:
         return 1 + phase_range[1] - phase_range[0]
     
-class Image:
+class ImageBuf:
     def __init__(self, image_shape):
         self.image = np.zeros(image_shape)
         self.n = 0
@@ -38,7 +38,7 @@ class Image:
         self.image *= 0
         self.n = 0
 
-class LightCurve:
+class LightCurveBuf:
     def __init__(self, n_bins):
         self.n_bins = n_bins
         self.fluxes = np.zeros(n_bins)

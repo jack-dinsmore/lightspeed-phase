@@ -9,7 +9,7 @@ from astropy import units as u
 pint.logging.setup(level="WARNING")
 from dinsmore.coords import to_hms
 
-OBSERVATORY = "LCO"
+OBSERVATORY = "Las Campanas Observatory"
 STORAGE_INTERVAL = 10*60 # Minutes of phases to store
 pint.observatory.topo_obs.TopoObs(OBSERVATORY, location=EarthLocation.of_site(OBSERVATORY))
 

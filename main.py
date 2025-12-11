@@ -1,7 +1,8 @@
 import numpy as np
 from scipy.signal import convolve
 import tkinter as tk
-from tkinter import Label, Entry, Button, Scale, LabelFrame, Checkbutton, OptionMenu
+from tkinter import Label, Entry, Button, Scale, LabelFrame, Checkbutton, OptionMenu, Toplevel
+from PIL import Image, ImageTk
 import threading, datetime, argparse, cv2, queue, time, os
 from astropy.time import Time
 from astropy.coordinates import SkyCoord, EarthLocation
@@ -15,6 +16,9 @@ LC_LEFT_BOUND = 50 # left bound of the plot
 LC_LOWER_BOUND = LC_WINDOW_SIZE[1]-40 # Lower bound of the plot
 STRETCH_SEVERITY = 10
 SAVE_DIRECTORY = "data"
+
+CONTROL_KEY = 0x4
+SHIFT_KEY = 0x1
 
 def show_span(image, r, color):
     plot_width = LC_WINDOW_SIZE[0] - LC_LEFT_BOUND
@@ -62,8 +66,6 @@ class PhaseGUI(tk.Tk):
         self.lc_fluxes = None
         self.lc_phase_bin_edges = None
 
-        self.lc_window_created = False
-        self.image_window_created = False
         self.stretch = (0.5, 0.5)
         self.marker = None
 
@@ -170,8 +172,27 @@ class PhaseGUI(tk.Tk):
         Label(lc_params_frame, text="Then click and drag in the LC to set \"on\" range").grid(row=2, column=0)
         Label(lc_params_frame, text="Hold shift & click and drag to set the \"off\" range").grid(row=3, column=0)
         Label(lc_params_frame, text="The bottom image shows on minus off").grid(row=4, column=0)
-        Label(lc_params_frame, text="You can also right-click to place a circle").grid(row=5, column=0)
+        Label(lc_params_frame, text="You can also shift-click to place a circle").grid(row=5, column=0)
+
+
+        # Create the lightcurve and image windows
+        self.image_window = Toplevel(self)
+        self.image_window.title("Image")
+        self.image_panel = Label(self.image_window)
+        self.image_panel = Label(self.image_window)
+        self.image_panel.bind("<Button-1>", self.on_image_ldown) # Left click
+        self.image_panel.bind("<B1-Motion>", self.on_image_lmove) # Left drag
+        self.image_panel.pack()
+        self.lightcurve_window = Toplevel(self)
+        self.lightcurve_window.title("Light curve")
+        self.lightcurve_panel = Label(self.lightcurve_window)
+        self.lightcurve_panel.bind("<Button-1>", self.on_lc_ldown) # Left click
+        self.lightcurve_panel.bind("<B1-Motion>", self.on_lc_lmove) # Left drag
+        self.lightcurve_panel.bind("<ButtonRelease-1>", self.on_lc_lup) # Left up
+        self.lightcurve_panel.pack()
+        self.image_panel.focus_set()
         
+        # Initialize
         self.set_ephem_file()
         self.clear_data()
         self.update_frame_display()
@@ -179,7 +200,6 @@ class PhaseGUI(tk.Tk):
     def on_close(self):
         with self.range_lock:
             with self.stretch_lock:
-                cv2.destroyAllWindows()
                 self.destroy()
 
     def set_camera_data_from_file(self, saved_data_feed):
@@ -225,46 +245,71 @@ class PhaseGUI(tk.Tk):
     def update_start_time(self, start_time):
         self.t_start = start_time
 
-    def on_event_image(self, event, x, y, flags, param):
-        left_down = (flags & cv2.EVENT_FLAG_LBUTTON)!=0
-        control_down = (flags & cv2.EVENT_FLAG_CTRLKEY)!=0
+    def on_image_ldown(self, event):
+        control_down = (event.state & CONTROL_KEY) != 0
+        shift_down = (event.state & SHIFT_KEY) != 0
         with self.stretch_lock:
-            if event == cv2.EVENT_LBUTTONDOWN or (event == cv2.EVENT_MOUSEMOVE and left_down):
-                if control_down:
-                    self.stretch = [
-                        (x/(self.image_shape[1])),
-                        1-(y/(self.image_shape[0]*3+1+10))
-                    ]
-                else:
-                    # Place ROI
-                    if y >= 0:
-                        self.roi_moved = (x, y % self.image_shape[0])
-            elif event == cv2.EVENT_RBUTTONDOWN and not control_down:
-                # Place marker
-                self.marker = (x, y % self.image_shape[0])
+            if shift_down:
+                self.marker = (event.x, event.y % self.image_shape[0])
+            elif control_down:
+                self.stretch = [
+                    (event.x/(self.image_shape[1])),
+                    1-(event.y/(self.image_shape[0]*3+1+10))
+                ]
+            else:
+                # Place ROI
+                if event.y >= 0:
+                    self.roi_moved = (event.x, event.y % self.image_shape[0])
 
-    def on_event_lc(self, event, x, y, flags, param):
-        shift_down = (flags & cv2.EVENT_FLAG_SHIFTKEY)!=0
-        left_down = (flags & cv2.EVENT_FLAG_LBUTTON)!=0
+    def on_image_lmove(self, event):
+        control_down = (event.state & CONTROL_KEY) != 0
+        shift_down = (event.state & SHIFT_KEY) != 0
+        with self.stretch_lock:
+            if shift_down:
+                self.marker = (event.x, event.y % self.image_shape[0])
+            elif control_down:
+                self.stretch = [
+                    (event.x/(self.image_shape[1])),
+                    1-(event.y/(self.image_shape[0]*3+1+10))
+                ]
+            else:
+                # Place ROI
+                if event.y >= 0:
+                    self.roi_moved = (event.x, event.y % self.image_shape[0])
 
-        mouse_phase = (float(x) - LC_LEFT_BOUND) / (LC_WINDOW_SIZE[0] - LC_LEFT_BOUND)
+    def on_lc_ldown(self, event):
+        mouse_phase = (float(event.x) - LC_LEFT_BOUND) / (LC_WINDOW_SIZE[0] - LC_LEFT_BOUND)
         if 0 > mouse_phase or mouse_phase > 1:
             return
         
         with self.range_lock:
-            # The cursor is in a valid position. Begin to move the phase windows
-            if event == cv2.EVENT_LBUTTONDOWN:
-                # Begin drawing a new boundary
-                self.temporary_range = [mouse_phase, mouse_phase]
-            elif event == cv2.EVENT_MOUSEMOVE and left_down and self.temporary_range is not None:
-                self.temporary_range[1] = mouse_phase
-            elif event == cv2.EVENT_LBUTTONUP and self.temporary_range is not None:
+            self.temporary_range = [mouse_phase, mouse_phase]
+
+    def on_lc_lup(self, event):
+        shift_down = (event.state & SHIFT_KEY)!=0
+
+        mouse_phase = (float(event.x) - LC_LEFT_BOUND) / (LC_WINDOW_SIZE[0] - LC_LEFT_BOUND)
+        if 0 > mouse_phase or mouse_phase > 1:
+            return
+        
+        with self.range_lock:
+            if self.temporary_range is None: return
+            if self.temporary_range is not None:
                 self.temporary_range[1] = mouse_phase
                 if shift_down:
                     self.off_range = np.copy(self.temporary_range)
                 else:
                     self.on_range = np.copy(self.temporary_range)
                 self.temporary_range = None
+
+    def on_lc_lmove(self, event):
+        mouse_phase = (float(event.x) - LC_LEFT_BOUND) / (LC_WINDOW_SIZE[0] - LC_LEFT_BOUND)
+        if 0 > mouse_phase or mouse_phase > 1:
+            return
+        
+        with self.range_lock:
+            if self.temporary_range is None: return
+            self.temporary_range[1] = mouse_phase
 
     def clear_data(self):
         self.clear_lc()
@@ -277,15 +322,15 @@ class PhaseGUI(tk.Tk):
         self.lc_phase_bin_edges = np.linspace(0, 1, n_bins+1)
         
         if self.lc_fluxes is None or n_bins != len(self.lc_fluxes.get()):
-            self.lc_fluxes = LightCurve(n_bins) # Fluxes in each LC bin
+            self.lc_fluxes = LightCurveBuf(n_bins) # Fluxes in each LC bin
         else:
             self.lc_fluxes.clear()
 
     def clear_image(self):
         if self.on_image is None or self.off_image is None:
-            self.total_image = Image(self.image_shape)
-            self.on_image = Image(self.image_shape)
-            self.off_image = Image(self.image_shape)
+            self.total_image = ImageBuf(self.image_shape)
+            self.on_image = ImageBuf(self.image_shape)
+            self.off_image = ImageBuf(self.image_shape)
         else:
             self.total_image.clear()
             self.on_image.clear()
@@ -333,12 +378,6 @@ class PhaseGUI(tk.Tk):
         if self.roi_center is None:
             return
         
-        if not self.lc_window_created:
-            # Create the window
-            cv2.namedWindow('Lightcurve', cv2.WINDOW_NORMAL)
-            cv2.setMouseCallback('Lightcurve', self.on_event_lc)
-            self.lc_window_created = True
-
         plot_width = LC_WINDOW_SIZE[0]-LC_LEFT_BOUND # left bound of the plot
         lc_fluxes = self.lc_fluxes.get()
         lc_errorbar = np.sqrt(lc_fluxes/self.lc_fluxes.num() + 1e-5)
@@ -405,8 +444,9 @@ class PhaseGUI(tk.Tk):
 
         cv2.putText(image, f'#={self.lc_fluxes.num()}', (LC_LEFT_BOUND+plot_width//2-25,10), cv2.FONT_HERSHEY_COMPLEX, 0.5, (255,255,255), 1, cv2.LINE_AA)
 
-        cv2.imshow('Lightcurve', image)
-        cv2.waitKey(1)
+        imgtk = ImageTk.PhotoImage(Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB)))
+        self.lightcurve_panel.imgtk = imgtk
+        self.lightcurve_panel.configure(image=imgtk)
 
     def apply_stretch(self, image, vmin, vmax, is_colorbar=False):
         # Scale the image to zero to one
@@ -459,11 +499,6 @@ class PhaseGUI(tk.Tk):
         return scaled_image
 
     def display_image(self):
-        if not self.image_window_created:
-            cv2.namedWindow("Image", cv2.WINDOW_NORMAL)
-            cv2.setMouseCallback('Image', self.on_event_image)
-            self.off_window_created = True
-
         merged_image = np.zeros((3*self.image_shape[0]+1+10, self.image_shape[1], 3), np.uint8)
 
         # Refresh the total image
@@ -522,9 +557,10 @@ class PhaseGUI(tk.Tk):
                 cv2.putText(merged_image, f"SNR: {snr_metric:.1f}",
                     (self.image_shape[1]//2-40, 5*self.image_shape[0]//2+11+20),
                     cv2.FONT_HERSHEY_COMPLEX, 0.5, (255, 0, 255), 1, cv2.LINE_AA)
-
-        cv2.imshow("Image", merged_image)
-        cv2.waitKey(1)
+                
+        imgtk = ImageTk.PhotoImage(Image.fromarray(cv2.cvtColor(merged_image, cv2.COLOR_BGR2RGB)))
+        self.image_panel.imgtk = imgtk
+        self.image_panel.configure(image=imgtk)
 
     def update_frame_display(self):
         # Update the status message
