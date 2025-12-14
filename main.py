@@ -582,7 +582,7 @@ class PhaseGUI(tk.Tk):
                 self.roi_moved = None
         
         # Process everything in the queue 
-        while not self.frame_queue.empty():
+        while not self.timestamp_queue.empty():
             frame = self.frame_queue.get_nowait().astype(float)
             timestamp = self.timestamp_queue.get_nowait()
 
