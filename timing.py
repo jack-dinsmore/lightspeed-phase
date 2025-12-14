@@ -81,6 +81,7 @@ def get_all_ephemerides_ra_dec(tel_ra, tel_dec):
 
 class Ephemeris:
     def __init__(self, filename, gps_time):
+        print(f"Loading ephemeris {filename}")
         self.model = model_builder.get_model(f"ephemerides/{filename}")
         self.nu = self.model["F0"].value
         self.ephem = self.model["EPHEM"].value

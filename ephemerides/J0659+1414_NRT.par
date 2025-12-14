@@ -19,7 +19,8 @@ TRES           559.307
 EPHVER         5                           
 CLK            TT(BIPM2011)
 MODE 1
-UNITS          TCB
+UNITS          TDB
+# JTD: I manually changed units from TCB to TDB to avoid a PINT error
 TIMEEPH        IF99
 DILATEFREQ     Y
 PLANET_SHAPIRO Y
