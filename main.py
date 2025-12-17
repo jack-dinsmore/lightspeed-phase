@@ -15,7 +15,7 @@ LC_WINDOW_SIZE = (550, 300)
 LC_LEFT_BOUND = 50 # left bound of the plot
 LC_LOWER_BOUND = LC_WINDOW_SIZE[1]-40 # Lower bound of the plot
 STRETCH_SEVERITY = 10
-SAVE_DIRECTORY = "data"
+CAPTURE_PATH = "/nvme-data/Lightspeed"
 
 CONTROL_KEY = 0x4
 SHIFT_KEY = 0x1
@@ -627,7 +627,10 @@ class SavedDataThread(threading.Thread):
         super().__init__()
         self.frame_queue = frame_queue
         self.timestamp_queue = timestamp_queue
-        self.save_directory = SAVE_DIRECTORY
+        twelve_hours_ago = datetime.datetime.now().astimezone() - datetime.timedelta(hours=12)
+        year_month_day = twelve_hours_ago.strftime("%Y_%m_%d")
+        self.save_directory = f"{CAPTURE_PATH}/captures_{year_month_day}"
+        self.start_time = time.time()
 
         if day_string is None:
             day_string = datetime.date.today().strftime("%Y%m%d")
@@ -666,13 +669,10 @@ class SavedDataThread(threading.Thread):
             filename = f"{self.save_directory}/{self.object_name}_{self.day_string}_{self.time_string}_cube{cube_index:03d}.fits"
 
             # Check if filename exists
-            for _ in range(20):
+            while True:
                 if os.path.exists(filename):
                     break
-                time.sleep(0.1)
-            if not os.path.exists(filename):
-                print(f"Could not find file {filename}. Feed stopped")
-                break
+                time.sleep(0.1) # Wait 100 ms
 
             print(f"Loading file {filename}")
             with fits.open(filename) as hdul:
@@ -680,9 +680,8 @@ class SavedDataThread(threading.Thread):
                 timestamps = hdul[2].data["TIMESTAMP"]
 
             # Submit frames
-            start = time.time()
             for frame, timestamp in zip(frames, timestamps):
-                desired_time = (timestamp - timestamps[0]) + start
+                desired_time = timestamp + self.start_time
                 time.sleep(max(desired_time - time.time(), 0)) # Sleep until the next frame is due
                 try:
                     self.frame_queue.put_nowait(frame)
