@@ -219,7 +219,7 @@ class PhaseGUI(tk.Tk):
         with fits.open(saved_data_feed.start_filename) as hdul:
             # Get the start time of the observation in MJD
             self.gps_time = Time(hdul[0].header["GPSSTART"], scale="utc").mjd
-            self.n_framebundle = int(hdul[1].header["HIERARCH FRAMEBUNDLE NUMBER"])
+            self.n_framebundle = 1#int(hdul[1].header["HIERARCH FRAMEBUNDLE NUMBER"]) # TODO
             self.upper_left = int(hdul[1].header["HIERARCH SUBARRAY HPOS"]), int(hdul[1].header["HIERARCH SUBARRAY VPOS"])
             self.ra_pnt = hdul[1].header["TELRA"]
             self.dec_pnt = hdul[1].header["TELDEC"]
@@ -305,7 +305,7 @@ class PhaseGUI(tk.Tk):
 
     def on_lc_ldown(self, event):
         with self.bin_lock:
-            event_x = int(event.x / self.image_binning)
+            event_x = event.x
         mouse_phase = (float(event_x) - LC_LEFT_BOUND) / (LC_WINDOW_SIZE[0] - LC_LEFT_BOUND)
         if 0 > mouse_phase or mouse_phase > 1:
             return
@@ -315,7 +315,7 @@ class PhaseGUI(tk.Tk):
 
     def on_lc_lup(self, event):
         with self.bin_lock:
-            event_x = int(event.x / self.image_binning)
+            event_x = event.x
         shift_down = (event.state & SHIFT_KEY)!=0
 
         mouse_phase = (float(event_x) - LC_LEFT_BOUND) / (LC_WINDOW_SIZE[0] - LC_LEFT_BOUND)
@@ -334,8 +334,7 @@ class PhaseGUI(tk.Tk):
 
     def on_lc_lmove(self, event):
         with self.bin_lock:
-            event_x = int(event.x / self.image_binning)
-            event_y = int(event.y / self.image_binning)
+            event_x = event.x
         mouse_phase = (float(event_x) - LC_LEFT_BOUND) / (LC_WINDOW_SIZE[0] - LC_LEFT_BOUND)
         if 0 > mouse_phase or mouse_phase > 1:
             return
@@ -552,8 +551,8 @@ class PhaseGUI(tk.Tk):
                 on_image = self.on_image.get().astype(float)
                 off_image = self.off_image.get().astype(float)
                 difference_image = on_image - off_image
-                vmin = np.min(difference_image)
-                vmax = np.max(difference_image)
+                vmin = np.nanpercentile(difference_image, 5)#np.min(difference_image)
+                vmax = np.nanpercentile(difference_image, 95)#np.max(difference_image)
                 stretched_difference = self.apply_stretch(difference_image, vmin, vmax)
                 merged_image[self.image_shape[0]+1:2*self.image_shape[0]+1,:, :] = stretched_difference
 
