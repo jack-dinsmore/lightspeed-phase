@@ -90,7 +90,7 @@ class Ephemeris:
         self.load_new_phases()
     
     def load_new_phases(self):
-        self.timestamps = np.arange(STORAGE_INTERVAL) + self.storage_index * STORAGE_INTERVAL
+        self.timestamps = np.arange(STORAGE_INTERVAL).astype(float) + self.storage_index * STORAGE_INTERVAL
         times_mjd = self.timestamps / (3600 * 24) + self.gps_time
         toas = pint.toa.get_TOAs_array(
             Time(times_mjd, format="mjd", scale="utc"),
@@ -114,7 +114,6 @@ class Ephemeris:
         self.load_new_phases()
 
     def get_phase(self, timestamp):
-        
         """
         Get the phase of an event with the provided ephemeris and timestamp
         """

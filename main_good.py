@@ -52,10 +52,8 @@ class PhaseGUI(tk.Tk):
         self.last_timestamp = None
         self.range_lock = threading.Lock()
         self.stretch_lock = threading.Lock()
-        self.bin_lock = threading.Lock()
         self.frame_index = 0
-        self.image_binning = 1
-        
+
         self.roi_center = None # Center of the ROI (pix)
         self.roi_width = None # Full width of the square ROI (pix)
         self.roi_mask = None # ROI pixel mask
@@ -146,33 +144,26 @@ class PhaseGUI(tk.Tk):
         self.blur_var.set(0)
         self.blur_scale = Scale(lc_params_frame, from_=0, to_=6, resolution=0.1, length=150, variable=self.blur_var, orient=tk.HORIZONTAL)
         self.blur_scale.grid(row=0, column=1)
-        
-        Label(lc_params_frame, text="Image rebinning:").grid(row=1, column=0)
-        self.bin_var = tk.IntVar()
-        self.bin_var.set(1)
-        self.bin_var.trace_add("write", lambda *_: self.set_bin())
-        self.bin_entry = Entry(lc_params_frame, textvariable=self.bin_var)
-        self.bin_entry.grid(row=1, column=1)
 
-        Label(lc_params_frame, text="Min e-:").grid(row=2, column=0)
+        Label(lc_params_frame, text="Min e-:").grid(row=1, column=0)
         self.stretch_min_var = tk.IntVar()
         self.stretch_min_var.set(0)
         self.buffer_size_entry = Entry(lc_params_frame, textvariable=self.stretch_min_var)
-        self.buffer_size_entry.grid(row=2, column=1)
+        self.buffer_size_entry.grid(row=1, column=1)
 
-        Label(lc_params_frame, text="Max e-:").grid(row=3, column=0)
+        Label(lc_params_frame, text="Max e-:").grid(row=2, column=0)
         self.stretch_max_var = tk.IntVar()
         self.stretch_max_var.set(0)
         self.buffer_size_entry = Entry(lc_params_frame, textvariable=self.stretch_max_var)
-        self.buffer_size_entry.grid(row=3, column=1)
+        self.buffer_size_entry.grid(row=2, column=1)
 
         self.reset_image_button = Button(lc_params_frame, text="Reset images", command=self.clear_image)
-        self.reset_image_button.grid(row=4, column=0)
+        self.reset_image_button.grid(row=3, column=0)
         self.reset_lc_button = Button(lc_params_frame, text="Reset lightcurve", command=self.clear_lc)
-        self.reset_lc_button.grid(row=4, column=1)
+        self.reset_lc_button.grid(row=3, column=1)
 
         self.status_message = tk.Label(lc_params_frame, text="Initialized", justify=tk.LEFT, anchor="w", width=30)
-        self.status_message.grid(row=5, column=0, columnspan=2, sticky='nsew')
+        self.status_message.grid(row=4, column=0, columnspan=2, sticky='nsew')
 
         # Instructions
         lc_params_frame = LabelFrame(self.main_frame, text="Instructions", padx=5, pady=5)
@@ -218,21 +209,18 @@ class PhaseGUI(tk.Tk):
         """
         with fits.open(saved_data_feed.start_filename) as hdul:
             # Get the start time of the observation in MJD
-            self.gps_time = Time(hdul[0].header["GPSSTART"], scale="utc").mjd
+            self.gps_time = Time(hdul[0].header["GPSSTART"], scale="utc")
+            frame_shape = hdul[1].data[0].shape
             self.n_framebundle = int(hdul[1].header["HIERARCH FRAMEBUNDLE NUMBER"])
             self.upper_left = int(hdul[1].header["HIERARCH SUBARRAY HPOS"]), int(hdul[1].header["HIERARCH SUBARRAY VPOS"])
             self.ra_pnt = hdul[1].header["TELRA"]
             self.dec_pnt = hdul[1].header["TELDEC"]
 
-        print(saved_data_feed.start_filename)
-        self.image_shape = (
-            int(hdul[1].header["HIERARCH SUBARRAY VSIZE"]),
-            int(hdul[1].header["HIERARCH SUBARRAY HSIZE"]), 
-        )
-        print(self.image_shape)
+        print(frame_shape[0], self.n_framebundle)
+        self.image_shape = (frame_shape[0]//self.n_framebundle, frame_shape[1])
 
     def set_camera_data_from_camera_gui(self, camera_gui):
-        """self.image_binning
+        """
         Set the camera feed metadata based on the camera thread
         """
         raise NotImplementedError()
@@ -256,57 +244,43 @@ class PhaseGUI(tk.Tk):
         self.ephemeris.set_freq(get_tk_value(self.ephem_freq_var))
         print("Updated ephemeris")
 
-    def set_bin(self, *_):
-        with self.bin_lock:
-            value = get_tk_value(self.bin_var)
-            if value > 0:
-                self.image_binning = value
-
     def update_start_time(self, start_time):
         self.t_start = start_time
 
     def on_image_ldown(self, event):
-        with self.bin_lock:
-            event_x = int(event.x / self.image_binning)
-            event_y = int(event.y / self.image_binning)
         control_down = (event.state & CONTROL_KEY) != 0
         shift_down = (event.state & SHIFT_KEY) != 0
         with self.stretch_lock:
             if shift_down:
-                self.marker = (event_x, event_y % self.image_shape[0])
+                self.marker = (event.x, event.y % self.image_shape[0])
             elif control_down:
                 self.stretch = [
-                    (event_x/(self.image_shape[1])),
-                    1-(event_y/(self.image_shape[0]*3+1+10))
+                    (event.x/(self.image_shape[1])),
+                    1-(event.y/(self.image_shape[0]*3+1+10))
                 ]
             else:
                 # Place ROI
-                if event_y >= 0:
-                    self.roi_moved = (event_x, event_y % self.image_shape[0])
+                if event.y >= 0:
+                    self.roi_moved = (event.x, event.y % self.image_shape[0])
 
     def on_image_lmove(self, event):
-        with self.bin_lock:
-            event_x = int(event.x / self.image_binning)
-            event_y = int(event.y / self.image_binning)
         control_down = (event.state & CONTROL_KEY) != 0
         shift_down = (event.state & SHIFT_KEY) != 0
         with self.stretch_lock:
             if shift_down:
-                self.marker = (event_x, event_y % self.image_shape[0])
+                self.marker = (event.x, event.y % self.image_shape[0])
             elif control_down:
                 self.stretch = [
-                    (event_x/(self.image_shape[1])),
-                    1-(event_y/(self.image_shape[0]*3+1+10))
+                    (event.x/(self.image_shape[1])),
+                    1-(event.y/(self.image_shape[0]*3+1+10))
                 ]
             else:
                 # Place ROI
-                if event_y >= 0:
-                    self.roi_moved = (event_x, event_y % self.image_shape[0])
+                if event.y >= 0:
+                    self.roi_moved = (event.x, event.y % self.image_shape[0])
 
     def on_lc_ldown(self, event):
-        with self.bin_lock:
-            event_x = int(event.x / self.image_binning)
-        mouse_phase = (float(event_x) - LC_LEFT_BOUND) / (LC_WINDOW_SIZE[0] - LC_LEFT_BOUND)
+        mouse_phase = (float(event.x) - LC_LEFT_BOUND) / (LC_WINDOW_SIZE[0] - LC_LEFT_BOUND)
         if 0 > mouse_phase or mouse_phase > 1:
             return
         
@@ -314,11 +288,9 @@ class PhaseGUI(tk.Tk):
             self.temporary_range = [mouse_phase, mouse_phase]
 
     def on_lc_lup(self, event):
-        with self.bin_lock:
-            event_x = int(event.x / self.image_binning)
         shift_down = (event.state & SHIFT_KEY)!=0
 
-        mouse_phase = (float(event_x) - LC_LEFT_BOUND) / (LC_WINDOW_SIZE[0] - LC_LEFT_BOUND)
+        mouse_phase = (float(event.x) - LC_LEFT_BOUND) / (LC_WINDOW_SIZE[0] - LC_LEFT_BOUND)
         if 0 > mouse_phase or mouse_phase > 1:
             return
         
@@ -333,10 +305,7 @@ class PhaseGUI(tk.Tk):
                 self.temporary_range = None
 
     def on_lc_lmove(self, event):
-        with self.bin_lock:
-            event_x = int(event.x / self.image_binning)
-            event_y = int(event.y / self.image_binning)
-        mouse_phase = (float(event_x) - LC_LEFT_BOUND) / (LC_WINDOW_SIZE[0] - LC_LEFT_BOUND)
+        mouse_phase = (float(event.x) - LC_LEFT_BOUND) / (LC_WINDOW_SIZE[0] - LC_LEFT_BOUND)
         if 0 > mouse_phase or mouse_phase > 1:
             return
         
@@ -591,10 +560,7 @@ class PhaseGUI(tk.Tk):
                     (self.image_shape[1]//2-40, 5*self.image_shape[0]//2+11+20),
                     cv2.FONT_HERSHEY_COMPLEX, 0.5, (255, 0, 255), 1, cv2.LINE_AA)
                 
-        with self.bin_lock:
-            img = Image.fromarray(cv2.cvtColor(merged_image, cv2.COLOR_BGR2RGB))
-            img = img.resize((img.size[0] * self.image_binning, img.size[1] * self.image_binning), resample=Image.NEAREST)
-        imgtk = ImageTk.PhotoImage(img)
+        imgtk = ImageTk.PhotoImage(Image.fromarray(cv2.cvtColor(merged_image, cv2.COLOR_BGR2RGB)))
         self.image_panel.imgtk = imgtk
         self.image_panel.configure(image=imgtk)
 
@@ -663,7 +629,7 @@ class SavedDataThread(threading.Thread):
         super().__init__()
         self.frame_queue = frame_queue
         self.timestamp_queue = timestamp_queue
-        twelve_hours_ago = datetime.datetime.now().astimezone() - datetime.timedelta(hours=12) 
+        twelve_hours_ago = datetime.datetime.now().astimezone() - datetime.timedelta(hours=12)
         year_month_day = twelve_hours_ago.strftime("%Y_%m_%d")
         self.save_directory = f"{CAPTURE_PATH}/captures_{year_month_day}"
         self.start_time = time.time()
